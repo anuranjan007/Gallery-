@@ -1,42 +1,61 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using SecureFileManager.Infrastructure.Data;
 using SecureFileManager.Infrastructure.Services;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuration
 builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                   .AddJsonFile("appsettings.Development.json", optional: true)
                   .AddEnvironmentVariables();
 
-// Services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme.",
+        Name = "Authorization",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer"
+    });
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme { Reference = new Microsoft.OpenApi.Models.OpenApiReference { Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer" } },
+            new string[] { }
+        }
+    });
+});
 
 // DbContext
 var connectionString = builder.Configuration.GetValue<string>("ConnectionStrings:DefaultConnection") ?? "Server=(localdb)\\mssqllocaldb;Database=SecureFileManagerDb;Trusted_Connection=True;";
 builder.Services.AddDbContext<AppDbContext>(opts => opts.UseSqlServer(connectionString));
 
-// Application services
+// Identity helpers
+builder.Services.AddScoped<IPasswordHasher<SecureFileManager.Domain.Entities.AdminUser>, PasswordHasher<SecureFileManager.Domain.Entities.AdminUser>>();
+
+// App services
+builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IFileService, FileService>();
+
 builder.Services.AddScoped<FileSystemStorageService>();
 builder.Services.AddScoped<EncryptionService>();
 
-// Authentication (JWT skeleton)
+// Authentication (JWT)
 var jwtKey = builder.Configuration.GetValue<string>("Jwt:SigningKey") ?? "development-signing-key-please-replace";
-var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+var signingKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtKey));
 
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
-    options.TokenValidationParameters = new TokenValidationParameters
+    options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
@@ -50,6 +69,8 @@ builder.Services.AddAuthentication(options =>
 
 var app = builder.Build();
 
+app.UseApiExceptionHandling();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -59,7 +80,32 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
+
+// Provision admin if configured
+using (var scope = app.Services.CreateScope())
+{
+    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var username = config.GetValue<string>("InitialAdmin:Username");
+    var password = config.GetValue<string>("InitialAdmin:Password");
+    if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<SecureFileManager.Domain.Entities.AdminUser>>();
+        if (!db.AdminUsers.Any())
+        {
+            var admin = new SecureFileManager.Domain.Entities.AdminUser
+            {
+                Id = Guid.NewGuid(),
+                Username = username,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            admin.PasswordHash = hasher.HashPassword(admin, password);
+            db.AdminUsers.Add(admin);
+            db.SaveChanges();
+        }
+    }
+}
 
 app.Run();
