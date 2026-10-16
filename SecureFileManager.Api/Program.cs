@@ -1,10 +1,5 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using SecureFileManager.Infrastructure.Data;
 using SecureFileManager.Infrastructure.Services;
 
@@ -35,9 +30,18 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// DbContext
-var connectionString = builder.Configuration.GetValue<string>("ConnectionStrings:DefaultConnection") ?? "Server=(localdb)\\mssqllocaldb;Database=SecureFileManagerDb;Trusted_Connection=True;";
-builder.Services.AddDbContext<AppDbContext>(opts => opts.UseSqlServer(connectionString));
+// DbContext: support SQLite dev/local fallback and SQL Server in production
+var connectionString = builder.Configuration.GetValue<string>("ConnectionStrings:DefaultConnection")
+                       ?? "DataSource=AppData/securefilemanager.db"; // default to local sqlite
+
+if (connectionString.Contains("DataSource=") || connectionString.EndsWith(".db", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddDbContext<AppDbContext>(opts => opts.UseSqlite(connectionString));
+}
+else
+{
+    builder.Services.AddDbContext<AppDbContext>(opts => opts.UseSqlServer(connectionString));
+}
 
 // Identity helpers
 builder.Services.AddScoped<IPasswordHasher<SecureFileManager.Domain.Entities.AdminUser>, PasswordHasher<SecureFileManager.Domain.Entities.AdminUser>>();
@@ -95,15 +99,29 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Provision admin if configured
+// If using SQLite (local dev) ensure DB is created automatically so you can test without running migrations
 using (var scope = app.Services.CreateScope())
 {
-    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-    var username = config.GetValue<string>("InitialAdmin:Username");
-    var password = config.GetValue<string>("InitialAdmin:Password");
+    var env = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
+    var cfg = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // If the provider is SQLite, attempt EnsureCreated to auto-create schema for quick local testing.
+    try
+    {
+        var providerName = db.Database.ProviderName ?? string.Empty;
+        if (providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            db.Database.EnsureCreated();
+        }
+    }
+    catch { /* ignore creation errors here; migrations are preferred for production */ }
+
+    // Provision admin if configured (dev only)
+    var username = cfg.GetValue<string>("InitialAdmin:Username");
+    var password = cfg.GetValue<string>("InitialAdmin:Password");
     if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
     {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<SecureFileManager.Domain.Entities.AdminUser>>();
         if (!db.AdminUsers.Any())
         {
