@@ -1,5 +1,10 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using SecureFileManager.Infrastructure.Data;
 using SecureFileManager.Infrastructure.Services;
 
@@ -40,9 +45,17 @@ builder.Services.AddScoped<IPasswordHasher<SecureFileManager.Domain.Entities.Adm
 // App services
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IFileService, FileService>();
+builder.Services.AddScoped<IFolderService, FolderService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<IAdminOtpService, AdminOtpService>();
 
 builder.Services.AddScoped<FileSystemStorageService>();
 builder.Services.AddScoped<EncryptionService>();
+
+// Email service: prefer SMTP, fallback to file in dev
+var smtpHost = builder.Configuration.GetValue<string>("Smtp:Host");
+if (!string.IsNullOrEmpty(smtpHost)) builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+else builder.Services.AddScoped<IEmailService, FileEmailService>();
 
 // Authentication (JWT)
 var jwtKey = builder.Configuration.GetValue<string>("Jwt:SigningKey") ?? "development-signing-key-please-replace";
