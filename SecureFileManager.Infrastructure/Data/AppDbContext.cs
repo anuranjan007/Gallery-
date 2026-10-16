@@ -12,6 +12,7 @@ namespace SecureFileManager.Infrastructure.Data
         public DbSet<FileRecord> Files => Set<FileRecord>();
         public DbSet<EncryptionKey> EncryptionKeys => Set<EncryptionKey>();
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+        public DbSet<AdminOtp> AdminOtps => Set<AdminOtp>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -34,16 +35,27 @@ namespace SecureFileManager.Infrastructure.Data
             {
                 b.HasKey(x => x.Id);
                 b.HasIndex(x => x.OriginalFileName);
+                b.HasOne<EncryptionKey>().WithMany().HasForeignKey(f => f.EncryptionKeyId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<EncryptionKey>(b =>
             {
                 b.HasKey(x => x.Id);
+                b.HasIndex(x => x.KeyVersion);
             });
 
             modelBuilder.Entity<AuditLog>(b =>
             {
                 b.HasKey(x => x.Id);
+                b.HasIndex(x => x.CreatedAt);
+                b.Property(x => x.Details).HasMaxLength(2000);
+            });
+
+            modelBuilder.Entity<AdminOtp>(b =>
+            {
+                b.HasKey(x => x.Id);
+                b.HasIndex(x => x.EmailOrMobile);
+                b.HasIndex(x => x.ExpiresAt);
             });
         }
     }

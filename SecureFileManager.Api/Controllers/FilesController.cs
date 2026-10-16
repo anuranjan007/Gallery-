@@ -9,20 +9,22 @@ using System.Net.Mime;
 namespace SecureFileManager.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/files")]
     public class FilesController : ControllerBase
     {
         private readonly AppDbContext _db;
         private readonly FileSystemStorageService _storage;
         private readonly EncryptionService _enc;
         private readonly IConfiguration _config;
+        private readonly IAuditLogService _auditLog;
 
-        public FilesController(AppDbContext db, FileSystemStorageService storage, EncryptionService enc, IConfiguration config)
+        public FilesController(AppDbContext db, FileSystemStorageService storage, EncryptionService enc, IConfiguration config, IAuditLogService auditLog)
         {
             _db = db;
             _storage = storage;
             _enc = enc;
             _config = config;
+            _auditLog = auditLog;
         }
 
         [HttpPost("upload")]
@@ -33,58 +35,70 @@ namespace SecureFileManager.Api.Controllers
             var folder = await _db.Folders.FindAsync(new object[] { folderId }, ct);
             if (folder == null) return NotFound(new { message = "Folder not found" });
 
-            // Validate filename and content type minimally
             var sanitized = Path.GetFileName(file.FileName);
             var stored = _storage.GenerateUniqueFileName(sanitized);
             var relativePath = Path.Combine(folderId.ToString(), stored);
 
-            // Encrypt stream
+            // Generate data key and wrap
             var dataKey = _enc.GenerateDataKey();
             var wrapped = _enc.ProtectDataKey(dataKey);
-
-            // Prepare encryption format header: magic + version + chunkSize
             var chunkSize = _config.GetValue<int?>("Encryption:ChunkSizeBytes") ?? 1048576;
-            using var input = file.OpenReadStream();
-            // We'll write to temp memory stream of encrypted data then write to storage
-            using var cipherStream = new MemoryStream();
-            await _enc.EncryptStreamAsync(input, cipherStream, dataKey, chunkSize, ct);
-            cipherStream.Seek(0, SeekOrigin.Begin);
 
-            // Persist encrypted file
-            await _storage.WriteStreamAsync(cipherStream, relativePath, ct);
+            // Ensure directory exists and write encrypted stream directly to file
+            var fullPath = _storage.GetFullPathForRelative(relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
-            // Save metadata
-            var rec = new FileRecord
+            try
             {
-                Id = Guid.NewGuid(),
-                FolderId = folderId,
-                OriginalFileName = sanitized,
-                StoredFileName = stored,
-                StoragePath = relativePath,
-                ContentType = file.ContentType ?? MediaTypeNames.Application.Octet,
-                FileExtension = Path.GetExtension(sanitized),
-                OriginalSizeBytes = file.Length,
-                EncryptedSizeBytes = cipherStream.Length,
-                EncryptionKeyId = Guid.NewGuid(),
-                UploadedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
+                using (var inStream = file.OpenReadStream())
+                using (var fs = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    await _enc.EncryptStreamAsync(inStream, fs, dataKey, chunkSize, ct);
+                    await fs.FlushAsync(ct);
+                }
 
-            // Create encryption key record
-            var keyRec = new EncryptionKey
+                var fileInfo = new FileInfo(fullPath);
+
+                var rec = new FileRecord
+                {
+                    Id = Guid.NewGuid(),
+                    FolderId = folderId,
+                    OriginalFileName = sanitized,
+                    StoredFileName = stored,
+                    StoragePath = relativePath,
+                    ContentType = file.ContentType ?? MediaTypeNames.Application.Octet,
+                    FileExtension = Path.GetExtension(sanitized),
+                    OriginalSizeBytes = file.Length,
+                    EncryptedSizeBytes = fileInfo.Length,
+                    EncryptionKeyId = Guid.NewGuid(),
+                    UploadedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                var keyRec = new EncryptionKey
+                {
+                    Id = rec.EncryptionKeyId,
+                    KeyProvider = "DPAPI/fallback",
+                    WrappedDataKey = wrapped,
+                    ChunkSizeBytes = chunkSize,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _db.Files.Add(rec);
+                _db.EncryptionKeys.Add(keyRec);
+                await _db.SaveChangesAsync(ct);
+
+                await _auditLog.LogAsync("FileUploaded", "file", rec.Id.ToString(), rec.FolderId, null, "success", $"Uploaded {rec.OriginalFileName}", HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers["User-Agent"].ToString(), Request.Headers["X-Correlation-Id"].ToString(), ct);
+
+                return CreatedAtAction(nameof(Get), new { id = rec.Id }, new FileDto(rec.Id, rec.OriginalFileName, rec.ContentType, rec.OriginalSizeBytes, rec.UploadedAt, rec.FolderId));
+            }
+            catch (Exception ex)
             {
-                Id = rec.EncryptionKeyId,
-                KeyProvider = "DPAPI/fallback",
-                WrappedDataKey = wrapped,
-                ChunkSizeBytes = chunkSize,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _db.Files.Add(rec);
-            _db.EncryptionKeys.Add(keyRec);
-            await _db.SaveChangesAsync(ct);
-
-            return CreatedAtAction(nameof(Get), new { id = rec.Id }, new FileDto(rec.Id, rec.OriginalFileName, rec.ContentType, rec.OriginalSizeBytes, rec.UploadedAt, rec.FolderId));
+                // On failure, ensure no orphan file remains
+                try { if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath); } catch { }
+                await _auditLog.LogAsync("FileUploadFailed", "file", null, folderId, null, "failure", "Upload failed", HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers["User-Agent"].ToString(), Request.Headers["X-Correlation-Id"].ToString(), ct);
+                return StatusCode(500, new { message = "Upload failed" });
+            }
         }
 
         [HttpGet("{id}")]
@@ -103,15 +117,37 @@ namespace SecureFileManager.Api.Controllers
             var key = await _db.EncryptionKeys.FindAsync(new object[] { file.EncryptionKeyId }, ct);
             if (key == null) return StatusCode(500);
 
-            var wrapped = key.WrappedDataKey;
-            var dataKey = _enc.UnprotectDataKey(wrapped);
+            var dataKey = _enc.UnprotectDataKey(key.WrappedDataKey);
+            var fullPath = _storage.GetFullPathForRelative(file.StoragePath);
+            if (!System.IO.File.Exists(fullPath)) return NotFound();
 
-            var stream = _storage.OpenRead(file.StoragePath);
-            var plaintext = new MemoryStream();
-            await _enc.DecryptStreamAsync(stream, plaintext, dataKey, key.ChunkSizeBytes == 0 ? 1048576 : key.ChunkSizeBytes, ct);
-            plaintext.Seek(0, SeekOrigin.Begin);
+            // Stream decrypt directly to response
+            var readStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var pipe = new System.IO.Pipelines.Pipe();
 
-            return File(plaintext, file.ContentType, file.OriginalFileName, enableRangeProcessing: true);
+            // We'll create a streaming response using PushStream
+            Response.Headers["Cache-Control"] = "no-store";
+            Response.ContentType = file.ContentType;
+            Response.Headers["Content-Disposition"] = new Microsoft.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = file.OriginalFileName }.ToString();
+
+            try
+            {
+                // Use a custom stream where we decrypt on the fly and copy to response body
+                await using var outputStream = Response.BodyWriter.AsStream();
+                // Decrypt input readStream to outputStream
+                await _enc.DecryptStreamAsync(readStream, outputStream, dataKey, key.ChunkSizeBytes == 0 ? 1048576 : key.ChunkSizeBytes, ct);
+                await _auditLog.LogAsync("FileDownloaded", "file", file.Id.ToString(), file.FolderId, null, "success", $"Downloaded {file.OriginalFileName}", HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers["User-Agent"].ToString(), Request.Headers["X-Correlation-Id"].ToString(), ct);
+                return new EmptyResult(); // response already written
+            }
+            catch (InvalidDataException ex)
+            {
+                // Authentication failed during decrypt
+                return StatusCode(500, new { message = "Decryption failed" });
+            }
+            finally
+            {
+                readStream.Dispose();
+            }
         }
 
         [HttpGet("{id}/preview")]
@@ -119,7 +155,6 @@ namespace SecureFileManager.Api.Controllers
         {
             var file = await _db.Files.FindAsync(new object[] { id }, ct);
             if (file == null) return NotFound();
-            // Only allow certain content types
             var allowed = new[] { "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "video/mp4", "video/webm" };
             if (!allowed.Contains(file.ContentType)) return BadRequest(new { message = "Preview not available for this file type" });
 
@@ -127,14 +162,25 @@ namespace SecureFileManager.Api.Controllers
             if (key == null) return StatusCode(500);
             var dataKey = _enc.UnprotectDataKey(key.WrappedDataKey);
 
-            var stream = _storage.OpenRead(file.StoragePath);
-            var plaintext = new MemoryStream();
-            await _enc.DecryptStreamAsync(stream, plaintext, dataKey, key.ChunkSizeBytes == 0 ? 1048576 : key.ChunkSizeBytes, ct);
-            plaintext.Seek(0, SeekOrigin.Begin);
+            var fullPath = _storage.GetFullPathForRelative(file.StoragePath);
+            if (!System.IO.File.Exists(fullPath)) return NotFound();
 
             Response.Headers["X-Content-Type-Options"] = "nosniff";
             Response.Headers["Cache-Control"] = "no-store";
-            return File(plaintext, file.ContentType, file.OriginalFileName);
+            Response.ContentType = file.ContentType;
+
+            try
+            {
+                await using var readStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                await using var outputStream = Response.BodyWriter.AsStream();
+                await _enc.DecryptStreamAsync(readStream, outputStream, dataKey, key.ChunkSizeBytes == 0 ? 1048576 : key.ChunkSizeBytes, ct);
+                await _auditLog.LogAsync("FilePreviewed", "file", file.Id.ToString(), file.FolderId, null, "success", $"Previewed {file.OriginalFileName}", HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers["User-Agent"].ToString(), Request.Headers["X-Correlation-Id"].ToString(), ct);
+                return new EmptyResult();
+            }
+            catch (InvalidDataException ex)
+            {
+                return StatusCode(500, new { message = "Decryption failed" });
+            }
         }
     }
 }
