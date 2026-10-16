@@ -1,4 +1,5 @@
-using Microsoft.Maui.Controls;
+using SecureFileManager.Maui.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SecureFileManager.Maui;
 
