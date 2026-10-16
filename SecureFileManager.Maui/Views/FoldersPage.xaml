@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="SecureFileManager.Maui.Views.FoldersPage"
+             Title="Folders">
+    <StackLayout Padding="10">
+        <Button Text="New Folder" Clicked="OnNewFolderClicked" />
+        <CollectionView x:Name="FoldersList" SelectionMode="Single" SelectionChanged="OnFolderSelected">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Frame Padding="10" Margin="5">
+                        <StackLayout>
+                            <Label Text="{Binding Name}" FontSize="16" />
+                            <Label Text="{Binding CreatedAt}" FontSize="12" />
+                        </StackLayout>
+                    </Frame>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </StackLayout>
+</ContentPage>
