@@ -1,0 +1,12 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+*.md
+/App/Gallery/.vs/CopilotSnapshots/D4902E89D547BC48BF296B1FCD09F8B0
+/App/Gallery/.vs/Gallery/copilot-chat/959674d7/sessions
+/App/Gallery/.vs/Gallery/CopilotIndices/17.14.1700.50054
+/App/Gallery/.vs/Gallery
+/App/Gallery/bin/Debug
+/App/Gallery/obj/Debug
+/App/Gallery/obj
