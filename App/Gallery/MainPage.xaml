@@ -1,0 +1,104 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Gallery.MainPage"
+             BackgroundColor="#F7F9FC"
+             Shell.NavBarIsVisible="False">
+    <Grid>
+        <ScrollView x:Name="AuthScroll">
+            <Grid Padding="28,42" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="24">
+                <HorizontalStackLayout Spacing="10">
+                    <Border BackgroundColor="#4F46E5" StrokeThickness="0" StrokeShape="RoundRectangle 12" Padding="11">
+                        <Label Text="✦" TextColor="White" FontSize="22" />
+                    </Border>
+                    <Label Text="Cloudly" FontSize="25" FontAttributes="Bold" TextColor="#172033" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <VerticalStackLayout Grid.Row="1" Spacing="8" Margin="0,18,0,0">
+                    <Label x:Name="AuthTitle" Text="Your files, everywhere." FontSize="32" FontAttributes="Bold" TextColor="#172033" />
+                    <Label x:Name="AuthSubtitle" Text="Sign in to your private cloud gallery." FontSize="16" TextColor="#687386" />
+                </VerticalStackLayout>
+                <Border Grid.Row="2" BackgroundColor="White" Stroke="#E6EAF1" StrokeShape="RoundRectangle 20" Padding="22" Margin="0,4">
+                    <VerticalStackLayout Spacing="14">
+                        <Label x:Name="FormTitle" Text="Welcome back" FontSize="21" FontAttributes="Bold" TextColor="#172033" />
+                        <Label x:Name="NameLabel" Text="Full name" TextColor="#4C5668" IsVisible="False" />
+                        <Border x:Name="NameBorder" Stroke="#DCE1EA" StrokeShape="RoundRectangle 10" Padding="12,0" IsVisible="False">
+                            <Entry x:Name="NameEntry" Placeholder="Alex Morgan" TextColor="#172033" />
+                        </Border>
+                        <Label Text="Email address" TextColor="#4C5668" />
+                        <Border Stroke="#DCE1EA" StrokeShape="RoundRectangle 10" Padding="12,0">
+                            <Entry x:Name="EmailEntry" Placeholder="you@example.com" Keyboard="Email" TextColor="#172033" />
+                        </Border>
+                        <Label x:Name="PasswordLabel" Text="Password" TextColor="#4C5668" />
+                        <Border Stroke="#DCE1EA" StrokeShape="RoundRectangle 10" Padding="12,0">
+                            <Entry x:Name="PasswordEntry" Placeholder="Enter your password" IsPassword="True" TextColor="#172033" />
+                        </Border>
+                        <Button x:Name="AuthButton" Text="Sign in" Clicked="OnAuthClicked" BackgroundColor="#4F46E5" CornerRadius="10" FontAttributes="Bold" />
+                        <Button x:Name="SwitchButton" Text="Create a new account" Clicked="OnSwitchAuthClicked" BackgroundColor="Transparent" TextColor="#4F46E5" />
+                    </VerticalStackLayout>
+                </Border>
+                <Label Grid.Row="3" Text="Your files are encrypted and private by design." HorizontalTextAlignment="Center" TextColor="#8A93A3" FontSize="12" />
+            </Grid>
+        </ScrollView>
+
+        <ScrollView x:Name="OtpScroll" IsVisible="False">
+            <VerticalStackLayout Padding="28,70" Spacing="22">
+                <Label Text="←  Back" TextColor="#4F46E5" FontAttributes="Bold" />
+                <Label Text="Check your inbox" FontSize="32" FontAttributes="Bold" TextColor="#172033" />
+                <Label x:Name="OtpSubtitle" Text="We sent a 6-digit code to your email." TextColor="#687386" FontSize="16" />
+                <Border BackgroundColor="White" Stroke="#E6EAF1" StrokeShape="RoundRectangle 20" Padding="22">
+                    <VerticalStackLayout Spacing="18">
+                        <Label Text="Verification code" TextColor="#4C5668" />
+                        <Entry x:Name="OtpEntry" Placeholder="000000" Keyboard="Numeric" MaxLength="6" HorizontalTextAlignment="Center" FontSize="28" TextColor="#172033" />
+                        <Button Text="Verify email" Clicked="OnVerifyClicked" BackgroundColor="#4F46E5" CornerRadius="10" FontAttributes="Bold" />
+                        <Label Text="Didn't receive it? Resend code" HorizontalTextAlignment="Center" TextColor="#4F46E5" FontAttributes="Bold" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <Grid x:Name="Dashboard" IsVisible="False" RowDefinitions="Auto,Auto,Auto,*" Padding="22,30,22,18" RowSpacing="18">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                <VerticalStackLayout>
+                    <Label Text="Good morning, Alex" FontSize="14" TextColor="#7A8495" />
+                    <Label Text="My gallery" FontSize="28" FontAttributes="Bold" TextColor="#172033" />
+                </VerticalStackLayout>
+                <Border Grid.Column="1" BackgroundColor="#E9E7FF" StrokeThickness="0" StrokeShape="RoundRectangle 22" Padding="12">
+                    <Label Text="AM" TextColor="#4F46E5" FontAttributes="Bold" />
+                </Border>
+                <Button Grid.Column="2" Text="＋" FontSize="22" BackgroundColor="#4F46E5" CornerRadius="12" Clicked="OnUploadClicked" />
+            </Grid>
+            <Border Grid.Row="1" BackgroundColor="#4F46E5" StrokeThickness="0" StrokeShape="RoundRectangle 18" Padding="18">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+                    <Label Text="Storage" TextColor="#DCD9FF" />
+                    <Label Grid.Column="1" Text="68%" TextColor="White" FontAttributes="Bold" />
+                    <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Progress="0.68" ProgressColor="White" BackgroundColor="#7771E8" />
+                    <Label Grid.Row="2" Text="6.8 GB of 10 GB used" TextColor="White" FontSize="12" />
+                    <Label Grid.Row="2" Grid.Column="1" Text="Upgrade" TextColor="White" FontAttributes="Bold" FontSize="12" />
+                </Grid>
+            </Border>
+            <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <Border Stroke="#E1E5ED" BackgroundColor="White" StrokeShape="RoundRectangle 10" Padding="12,0">
+                    <SearchBar Placeholder="Search files" BackgroundColor="Transparent" TextColor="#172033" />
+                </Border>
+                <HorizontalStackLayout Grid.Column="1" Spacing="2">
+                    <Button x:Name="GridViewButton" Text="▦" Clicked="OnGridViewClicked" BackgroundColor="#E9E7FF" TextColor="#4F46E5" Padding="12,8" />
+                    <Button x:Name="ListViewButton" Text="☷" Clicked="OnListViewClicked" BackgroundColor="White" TextColor="#7A8495" Padding="12,8" />
+                </HorizontalStackLayout>
+            </Grid>
+            <ScrollView Grid.Row="3">
+                <VerticalStackLayout Spacing="20">
+                    <Label Text="Folders" FontSize="18" FontAttributes="Bold" TextColor="#172033" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                        <Border BackgroundColor="#FFF2D9" StrokeThickness="0" StrokeShape="RoundRectangle 14" Padding="15"><VerticalStackLayout Spacing="8"><Label Text="📁" FontSize="24" /><Label Text="Projects" FontAttributes="Bold" TextColor="#172033" /><Label Text="24 items" FontSize="12" TextColor="#7A8495" /></VerticalStackLayout></Border>
+                        <Border Grid.Column="1" BackgroundColor="#E7F7F1" StrokeThickness="0" StrokeShape="RoundRectangle 14" Padding="15"><VerticalStackLayout Spacing="8"><Label Text="📁" FontSize="24" /><Label Text="Personal" FontAttributes="Bold" TextColor="#172033" /><Label Text="86 items" FontSize="12" TextColor="#7A8495" /></VerticalStackLayout></Border>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto"><Label Text="Recent files" FontSize="18" FontAttributes="Bold" TextColor="#172033" /><Label Grid.Column="1" Text="See all  ›" TextColor="#4F46E5" FontAttributes="Bold" VerticalOptions="Center" /></Grid>
+                    <VerticalStackLayout x:Name="GridFiles" Spacing="12">
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12"><Border BackgroundColor="White" Stroke="#E7EAF0" StrokeShape="RoundRectangle 14" Padding="10"><VerticalStackLayout><Image Source="dotnet_bot.png" HeightRequest="105" Aspect="AspectFill" /><Label Text="Summer trip" FontAttributes="Bold" TextColor="#172033" Margin="0,8,0,0" /><Label Text="JPG · 2.4 MB" FontSize="12" TextColor="#7A8495" /></VerticalStackLayout></Border><Border Grid.Column="1" BackgroundColor="White" Stroke="#E7EAF0" StrokeShape="RoundRectangle 14" Padding="10"><VerticalStackLayout><Border BackgroundColor="#E9E7FF" StrokeThickness="0" HeightRequest="105" StrokeShape="RoundRectangle 10"><Label Text="▶" FontSize="32" TextColor="#4F46E5" HorizontalOptions="Center" VerticalOptions="Center" /></Border><Label Text="Product demo" FontAttributes="Bold" TextColor="#172033" Margin="0,8,0,0" /><Label Text="MP4 · 18.2 MB" FontSize="12" TextColor="#7A8495" /></VerticalStackLayout></Border></Grid>
+                    </VerticalStackLayout>
+                    <VerticalStackLayout x:Name="ListFiles" IsVisible="False" Spacing="10"><Border BackgroundColor="White" Stroke="#E7EAF0" StrokeShape="RoundRectangle 12" Padding="12"><Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"><Image Source="dotnet_bot.png" WidthRequest="54" HeightRequest="54" Aspect="AspectFill" /><VerticalStackLayout Grid.Column="1"><Label Text="Summer trip" FontAttributes="Bold" TextColor="#172033" /><Label Text="JPG · 2.4 MB · Today" FontSize="12" TextColor="#7A8495" /></VerticalStackLayout><Label Grid.Column="2" Text="•••" TextColor="#7A8495" VerticalOptions="Center" /></Grid></Border><Border BackgroundColor="White" Stroke="#E7EAF0" StrokeShape="RoundRectangle 12" Padding="12"><Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"><Border BackgroundColor="#E9E7FF" StrokeThickness="0" HeightRequest="54" WidthRequest="54" StrokeShape="RoundRectangle 10"><Label Text="▶" TextColor="#4F46E5" HorizontalOptions="Center" VerticalOptions="Center" /></Border><VerticalStackLayout Grid.Column="1"><Label Text="Product demo" FontAttributes="Bold" TextColor="#172033" /><Label Text="MP4 · 18.2 MB · Yesterday" FontSize="12" TextColor="#7A8495" /></VerticalStackLayout><Label Grid.Column="2" Text="•••" TextColor="#7A8495" VerticalOptions="Center" /></Grid></Border></VerticalStackLayout>
+                </VerticalStackLayout>
+            </ScrollView>
+        </Grid>
+    </Grid>
+</ContentPage>
